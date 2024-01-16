@@ -9,6 +9,19 @@ import Foundation
 
 // Defining a public struct named ServiceAccount which conforms to Codable protocol
 public struct ServiceAccount: Codable {
+  public init(type: String, projectId: String, privateKeyId: String, privateKeyPem: String, clientEmail: String, clientId: String, authUri: String, tokenUri: String, authProviderX509CertUrl: String, clientX509CertUrl: String) {
+    self.type = type
+    self.projectId = projectId
+    self.privateKeyId = privateKeyId
+    self.privateKeyPem = privateKeyPem
+    self.clientEmail = clientEmail
+    self.clientId = clientId
+    self.authUri = authUri
+    self.tokenUri = tokenUri
+    self.authProviderX509CertUrl = authProviderX509CertUrl
+    self.clientX509CertUrl = clientX509CertUrl
+  }
+  
     public let type: String
     public let projectId: String
     public let privateKeyId: String
