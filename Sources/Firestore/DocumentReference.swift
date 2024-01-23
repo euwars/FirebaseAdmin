@@ -78,4 +78,12 @@ extension DocumentReference {
         let headers = HPACKHeaders([("authorization", "Bearer \(accessToken)")])
         return try await getDocument(type: type, firestore: firestore, headers: headers)
     }
+  
+  public func getDocument<T: Decodable>(type: T.Type, firestore: Firestore) async throws -> T? {
+      guard let accessToken = try await firestore.getAccessToken() else {
+          fatalError("AcessToken is empty")
+      }
+      let headers = HPACKHeaders([("authorization", "Bearer \(accessToken)")])
+      return try await getDocument(type: type, firestore: firestore, headers: headers)
+  }
 }
