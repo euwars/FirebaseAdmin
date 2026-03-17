@@ -135,39 +135,33 @@ public class FirebaseAPIClient: @unchecked Sendable {
         guard let serviceAccount = serviceAccount else {
             return httpClient.eventLoopGroup.next().makeFailedFuture(FirebaseAPIError.serviceAccountNotSet)
         }
-        
-        do {
+
+        let promise = httpClient.eventLoopGroup.next().makePromise(of: OAuthTokenResponse.self)
+        promise.completeWithTask {
             let scopes = "https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/devstorage.full_control https://www.googleapis.com/auth/firebase https://www.googleapis.com/auth/identitytoolkit https://www.googleapis.com/auth/userinfo.email"
-            
-            let privateKey = try RSAKey.private(pem: serviceAccount.privateKeyPem)
-            let signers = JWTSigners()
-            signers.use(.rs256(key: privateKey), kid: JWKIdentifier(string: serviceAccount.privateKeyId))
-            
-            let jwt = try signers.sign(FirebaseAdminAuthPayload(
+
+            let privateKey = try Insecure.RSA.PrivateKey(pem: serviceAccount.privateKeyPem)
+            let keys = JWTKeyCollection()
+            await keys.add(rsa: privateKey, digestAlgorithm: .sha256, kid: JWKIdentifier(string: serviceAccount.privateKeyId))
+
+            let jwt = try await keys.sign(FirebaseAdminAuthPayload(
                 scope: scopes,
                 issuer: .init(stringLiteral: serviceAccount.clientEmail),
                 audience: .init(stringLiteral: serviceAccount.tokenUri))
             )
-            
+
             var request = try HTTPClient.Request(url: serviceAccount.tokenUri, method: .POST)
             request.headers.add(name: "Content-Type", value: "application/x-www-form-urlencoded")
             request.body = .string("grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=\(jwt)")
-            
-            return httpClient.execute(request: request).flatMap { response in
-                guard var byteBuffer = response.body else {
-                    return self.httpClient.eventLoopGroup.next().makeFailedFuture(FirebaseAPIError.missingResponseBody)
-                }
-                let responseData = byteBuffer.readData(length: byteBuffer.readableBytes)!
-                
-                do {
-                    return self.httpClient.eventLoopGroup.next().makeSucceededFuture(try self.decoder.decode(OAuthTokenResponse.self, from: responseData))
-                } catch {
-                    return self.httpClient.eventLoopGroup.next().makeFailedFuture(error)
-                }
+
+            let response = try await self.httpClient.execute(request: request).get()
+            guard var byteBuffer = response.body else {
+                throw FirebaseAPIError.missingResponseBody
             }
-        } catch {
-            return httpClient.eventLoopGroup.next().makeFailedFuture(error)
+            let responseData = byteBuffer.readData(length: byteBuffer.readableBytes)!
+            return try self.decoder.decode(OAuthTokenResponse.self, from: responseData)
         }
+        return promise.futureResult
     }
 }
 
@@ -192,15 +186,15 @@ struct FirebaseAdminAuthPayload: JWTPayload {
         case issuedAt = "iat"
         case scope = "scope"
     }
-    
+
     var scope: String
     var issuer: IssuerClaim
     var algorithm = "RS256"
     var issuedAt: IssuedAtClaim = .init(value: Date())
     var audience: AudienceClaim
     var expiration: ExpirationClaim = .init(value: Date().addingTimeInterval(.seconds(1000)))
-    
-    func verify(using signer: JWTSigner) throws {
+
+    func verify(using algorithm: some JWTAlgorithm) async throws {
         try self.expiration.verifyNotExpired()
     }
 }

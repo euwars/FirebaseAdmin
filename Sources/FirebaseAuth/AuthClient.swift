@@ -62,9 +62,9 @@ public class AuthClient {
         guard !jwks.keys.isEmpty else {
             throw AuthError.failedToResolveJWKS
         }
-        let signers = JWTSigners()
-        try signers.use(jwks: jwks)
-        return try signers.verify(idToken, as: FirebaseJWTPayload.self)
+        let keys = JWTKeyCollection()
+        try await keys.add(jwks: jwks)
+        return try await keys.verify(idToken, as: FirebaseJWTPayload.self)
     }
 
     public func getUser(uid: String) async throws -> FirebaseUser {

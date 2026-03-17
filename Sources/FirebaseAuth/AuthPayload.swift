@@ -31,7 +31,7 @@ public struct UserRecord: Codable, Sendable {
 
 
 // TODO: This could probably be filled out more.
-public struct FirebaseContext: Codable {
+public struct FirebaseContext: Codable, @unchecked Sendable {
     enum CodingKeys: String, CodingKey {
         case signInProvider = "sign_in_provider"
         case tenant, identities
@@ -76,23 +76,23 @@ public struct FirebaseJWTPayload: JWTPayload {
     public let firebase: FirebaseContext
     
     // https://firebase.google.com/docs/auth/admin/verify-id-tokens
-    public func verify(using signer: JWTSigner) throws {
+    public func verify(using algorithm: some JWTAlgorithm) async throws {
         guard subject.value != "" else {
-            throw JWTError.claimVerificationFailure(name: "sub", reason: "Subject claim cannot be empty.")
+            throw JWTError.claimVerificationFailure(failedClaim: subject, reason: "Subject claim cannot be empty.")
         }
-        
+
         guard issuedAt.value < Date() else {
-            throw JWTError.claimVerificationFailure(name: "iat", reason: "Issued at claim must be in the past.")
+            throw JWTError.claimVerificationFailure(failedClaim: issuedAt, reason: "Issued at claim must be in the past.")
         }
-        
+
         guard authTime < Date() else {
-            throw JWTError.claimVerificationFailure(name: "auth_time", reason: "Auth time claim must be in the past.")
+            throw JWTError.claimVerificationFailure(failedClaim: nil, reason: "Auth time claim must be in the past.")
         }
-        
+
         guard expirationAt.value > Date() else {
-            throw JWTError.claimVerificationFailure(name: "exp", reason: "Token expired at \(expirationAt.value)")
+            throw JWTError.claimVerificationFailure(failedClaim: expirationAt, reason: "Token expired at \(expirationAt.value)")
         }
-        
+
         try expirationAt.verifyNotExpired()
     }
 }

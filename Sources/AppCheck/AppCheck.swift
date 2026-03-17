@@ -7,7 +7,7 @@
 
 import Foundation
 import Synchronization
-@preconcurrency import JWTKit
+import JWTKit
 import AsyncHTTPClient
 import NIO
 @_exported import FirebaseApp
@@ -47,7 +47,7 @@ public struct AppCheckTokenPayload: JWTPayload, Sendable {
     /// Issued at time
     public var iat: IssuedAtClaim
 
-    public func verify(using signer: JWTSigner) throws {
+    public func verify(using algorithm: some JWTAlgorithm) async throws {
         try exp.verifyNotExpired()
     }
 }
@@ -161,12 +161,12 @@ public actor AppCheck {
             // Get JWKS
             let jwks = try await getJWKS(client: client)
 
-            // Setup JWT signers
-            let signers = JWTSigners()
-            try signers.use(jwks: jwks)
+            // Setup JWT key collection
+            let keys = JWTKeyCollection()
+            try await keys.add(jwks: jwks)
 
             // Verify and decode token
-            let payload = try signers.verify(token, as: AppCheckTokenPayload.self)
+            let payload = try await keys.verify(token, as: AppCheckTokenPayload.self)
 
             // Validate issuer
             if let projectNumber = projectNumber {

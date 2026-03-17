@@ -10,7 +10,7 @@ import FirestoreAPI
 import AsyncHTTPClient
 import NIO
 import NIOFoundationCompat
-@preconcurrency import JWTKit
+import JWTKit
 import Synchronization
 
 struct AccessTokenPayload: JWTPayload {
@@ -21,7 +21,7 @@ struct AccessTokenPayload: JWTPayload {
     var exp: ExpirationClaim
     var scope: String
 
-    func verify(using signer: JWTSigner) throws {
+    func verify(using algorithm: some JWTAlgorithm) async throws {
         try self.exp.verifyNotExpired()
     }
 }
@@ -37,7 +37,7 @@ public protocol AccessScope {
 public final class AccessTokenProvider: FirestoreAPI.AccessTokenProvider, Sendable {
 
     private let serviceAccount: ServiceAccount
-    private let signer: JWTSigner
+    private let privateKey: Insecure.RSA.PrivateKey
 
     public var scope: any FirestoreAPI.AccessScope { Firestore<HTTP2ClientTransport.Posix>.Scope() }
 
@@ -56,8 +56,7 @@ public final class AccessTokenProvider: FirestoreAPI.AccessTokenProvider, Sendab
 
     public init(serviceAccount: ServiceAccount) throws {
         self.serviceAccount = serviceAccount
-        let privateKey = try RSAKey.private(pem: serviceAccount.privateKeyPem)
-        self.signer = JWTSigner.rs256(key: privateKey)
+        self.privateKey = try Insecure.RSA.PrivateKey(pem: serviceAccount.privateKeyPem)
 
         // HTTPClientとEventLoopGroupを初期化時に作成（再利用）
         self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
@@ -119,7 +118,9 @@ public final class AccessTokenProvider: FirestoreAPI.AccessTokenProvider, Sendab
             scope: scope.value
         )
 
-        let token = try signer.sign(jwt)
+        let keys = JWTKeyCollection()
+        await keys.add(rsa: privateKey, digestAlgorithm: .sha256)
+        let token = try await keys.sign(jwt)
         let accessToken = try await requestAccessToken(signedJwt: token)
         return accessToken
     }
